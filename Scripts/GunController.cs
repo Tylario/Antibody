@@ -34,6 +34,7 @@ public class GunController : MonoBehaviour
     public float aimSpeed = 10f; // Speed of aiming transition
     public TextMeshProUGUI ammoDisplay; // TextMeshPro object for ammo display
     public bool gunsUnlocked = true; // Controls whether guns are visible/unlocked
+    private bool previousGunsUnlocked = false; // Track previous state of gunsUnlocked
 
     [Header("Recoil Settings")]
     public float recoilDuration = 0.1f; // Duration of the recoil effect
@@ -56,6 +57,16 @@ public class GunController : MonoBehaviour
 
     private void Update()
     {
+        if (gunsUnlocked != previousGunsUnlocked)
+        {
+            // Check if gunsUnlocked has just been turned true
+            if (gunsUnlocked)
+            {
+                SelectWeapon(currentWeaponIndex >= 0 ? currentWeaponIndex : 0);
+            }
+            previousGunsUnlocked = gunsUnlocked; // Update previous state
+        }
+
         if (!gunsUnlocked)
         {
             HideAllWeapons();
@@ -72,7 +83,7 @@ public class GunController : MonoBehaviour
         {
             if (currentWeapon.isAutomatic)
             {
-                // For automatic guns, start and stop shooting based on whether left mouse is held
+                // Handle automatic shooting
                 if (Input.GetMouseButton(0) && canShoot && shootingCoroutine == null)
                 {
                     shootingCoroutine = StartCoroutine(ContinuousShooting());
@@ -85,7 +96,7 @@ public class GunController : MonoBehaviour
             }
             else
             {
-                // For non-automatic guns, shoot only once when left mouse button is pressed
+                // Handle single-shot firing
                 if (Input.GetMouseButtonDown(0) && canShoot)
                 {
                     Shoot();

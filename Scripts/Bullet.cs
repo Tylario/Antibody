@@ -6,10 +6,12 @@ public class Bullet : MonoBehaviour
     public float lifetime = 2f; // Time before the bullet is destroyed
     public int damage = 10; // Damage dealt by the bullet (optional)
 
+
     private void Start()
     {
         // Destroy the bullet after a certain time to avoid infinite lifespan
         Destroy(gameObject, lifetime);
+
     }
 
     private void Update()
@@ -20,6 +22,9 @@ public class Bullet : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        //TODO
+        // TODO
+        
+        // Destroy the bullet
+        Destroy(gameObject);
     }
 }
