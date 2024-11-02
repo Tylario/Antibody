@@ -29,11 +29,12 @@ public class GunController : MonoBehaviour
     public Vector3 positionB; // Aim down sights position for the gun manager
     public float aimSpeed = 10f; // Speed of aiming transition
     public TextMeshProUGUI ammoDisplay; // TextMeshPro object for ammo display
+    public bool gunsUnlocked = true; // Controls whether guns are visible/unlocked
 
     [Header("Recoil Settings")]
     public float recoilDuration = 0.1f; // Duration of the recoil effect
-    public float recoilPositionAmount = 0.02f; // Amount of position recoil
-    public float recoilRotationAmount = 1f; // Amount of rotation recoil in degrees
+    public float recoilBackwardAmount = 0.02f; // Amount of backward movement recoil
+    public float recoilUpwardRotation = 5f; // Amount of upward rotation recoil in degrees
 
     private Coroutine shootingCoroutine; // Coroutine for continuous shooting when holding down the button
     private Vector3 originalPosition; // Original local position of the gun
@@ -41,15 +42,20 @@ public class GunController : MonoBehaviour
 
     private void Start()
     {
-        SelectWeapon(0); // Start with the first weapon if desired
         originalPosition = transform.localPosition;
         originalRotation = transform.localRotation;
-        transform.localPosition = positionA; // Set starting position for the gun manager
+        SelectWeapon(0); // Start with the first weapon if desired
         UpdateAmmoDisplay(); // Initialize ammo display
     }
 
     private void Update()
     {
+        if (!gunsUnlocked)
+        {
+            HideAllWeapons();
+            return;
+        }
+
         HandleWeaponSwitching();
 
         if (isReloading) return;
@@ -60,32 +66,44 @@ public class GunController : MonoBehaviour
         {
             if (currentWeapon.isAutomatic)
             {
-                if (Input.GetMouseButtonDown(0) && canShoot)
+                // For automatic guns, start and stop shooting based on whether left mouse is held
+                if (Input.GetMouseButton(0) && canShoot && shootingCoroutine == null)
                 {
                     shootingCoroutine = StartCoroutine(ContinuousShooting());
                 }
-                if (Input.GetMouseButtonUp(0) && shootingCoroutine != null)
+                else if (!Input.GetMouseButton(0) && shootingCoroutine != null)
                 {
                     StopCoroutine(shootingCoroutine);
+                    shootingCoroutine = null;
                 }
             }
             else
             {
-                if (Input.GetMouseButtonDown(0) && canShoot) Shoot();
+                // For non-automatic guns, shoot only once when left mouse button is pressed
+                if (Input.GetMouseButtonDown(0) && canShoot)
+                {
+                    Shoot();
+                }
             }
         }
 
-        if (Input.GetKeyDown(KeyCode.R) && bulletsInMag < currentWeapon.bulletsPerMag) StartCoroutine(Reload());
+        if (Input.GetKeyDown(KeyCode.R) && bulletsInMag < currentWeapon.bulletsPerMag)
+        {
+            StartCoroutine(Reload());
+        }
     }
+
 
     void HandleWeaponSwitching()
     {
         int previousWeaponIndex = currentWeaponIndex;
 
+        // Press 1, 2, or 3 to switch weapons
         if (Input.GetKeyDown(KeyCode.Alpha1)) currentWeaponIndex = 0;
         if (Input.GetKeyDown(KeyCode.Alpha2) && weapons.Length > 1) currentWeaponIndex = 1;
         if (Input.GetKeyDown(KeyCode.Alpha3) && weapons.Length > 2) currentWeaponIndex = 2;
 
+        // Scroll wheel to cycle weapons
         float scroll = Input.GetAxis("Mouse ScrollWheel");
         if (scroll > 0f) currentWeaponIndex = (currentWeaponIndex + 1) % weapons.Length;
         if (scroll < 0f) currentWeaponIndex = (currentWeaponIndex - 1 + weapons.Length) % weapons.Length;
@@ -95,12 +113,18 @@ public class GunController : MonoBehaviour
 
     void SelectWeapon(int index)
     {
+        if (shootingCoroutine != null)
+        {
+            StopCoroutine(shootingCoroutine);
+            shootingCoroutine = null;
+        }
+
         foreach (Weapon weapon in weapons)
         {
             weapon.weaponObject.SetActive(false);
         }
 
-        if (index >= 0 && index < weapons.Length)
+        if (gunsUnlocked && index >= 0 && index < weapons.Length)
         {
             weapons[index].weaponObject.SetActive(true);
             currentWeapon = weapons[index];
@@ -114,9 +138,17 @@ public class GunController : MonoBehaviour
         }
     }
 
+    void HideAllWeapons()
+    {
+        foreach (Weapon weapon in weapons)
+        {
+            weapon.weaponObject.SetActive(false);
+        }
+        ammoDisplay.text = ""; // Clear ammo display
+    }
+
     void HandleAiming()
     {
-        // Set the target position based on whether the player is holding right-click to aim
         Vector3 targetPosition = Input.GetMouseButton(1) ? positionB : positionA;
         transform.localPosition = Vector3.Lerp(transform.localPosition, targetPosition, Time.deltaTime * aimSpeed);
     }
@@ -131,16 +163,15 @@ public class GunController : MonoBehaviour
 
         canShoot = false;
 
-        // Fire the bullets with spread
         for (int i = 0; i < currentWeapon.bulletsPerShot; i++)
         {
             Vector3 shootDirection = currentWeapon.bulletSpawnPoint.forward;
 
-            // Apply random spread on both axes
             float randomSpreadX = Random.Range(-currentWeapon.bulletAccuracy, currentWeapon.bulletAccuracy);
             float randomSpreadY = Random.Range(-currentWeapon.bulletAccuracy, currentWeapon.bulletAccuracy);
 
             shootDirection = Quaternion.Euler(randomSpreadX, randomSpreadY, 0) * shootDirection;
+
             Instantiate(currentWeapon.bulletPrefab, currentWeapon.bulletSpawnPoint.position, Quaternion.LookRotation(shootDirection));
         }
 
@@ -152,26 +183,19 @@ public class GunController : MonoBehaviour
         StartCoroutine(ApplyRecoil()); // Apply recoil effect
     }
 
+    void ResetShoot()
+    {
+        canShoot = true;
+    }
+
     IEnumerator ApplyRecoil()
     {
-        // Determine the current target position based on aiming state
         Vector3 currentTargetPosition = Input.GetMouseButton(1) ? positionB : positionA;
 
-        // Calculate random recoil offset relative to the current target position
-        Vector3 recoilPosition = currentTargetPosition + new Vector3(
-            Random.Range(-recoilPositionAmount, recoilPositionAmount),
-            Random.Range(-recoilPositionAmount, recoilPositionAmount),
-            0
-        );
+        // Move the gun backward slightly and rotate it upward for recoil
+        Vector3 recoilPosition = currentTargetPosition - transform.forward * recoilBackwardAmount;
+        Quaternion recoilRotation = originalRotation * Quaternion.Euler(-recoilUpwardRotation, 0, 0);
 
-        // Define a consistent backward rotation for the recoil effect
-        Quaternion recoilRotation = originalRotation * Quaternion.Euler(
-            -recoilRotationAmount, // Consistent backward rotation on the X-axis
-            0,
-            0
-        );
-
-        // Move to recoil position and rotation
         float elapsed = 0f;
         while (elapsed < recoilDuration)
         {
@@ -196,20 +220,11 @@ public class GunController : MonoBehaviour
         transform.localRotation = originalRotation;
     }
 
-
-
-    void ResetShoot()
-    {
-        canShoot = true;
-    }
-
-   
-
     IEnumerator ContinuousShooting()
     {
         while (true)
         {
-            if (canShoot)
+            if (canShoot && !isReloading) // Check that we're not reloading
             {
                 Shoot();
             }
@@ -222,7 +237,13 @@ public class GunController : MonoBehaviour
         isReloading = true;
         canShoot = false;
 
-        Vector3 loweredPosition = originalPosition + Vector3.down * 0.5f; // Lower the gun manager for reload
+        if (shootingCoroutine != null)
+        {
+            StopCoroutine(shootingCoroutine);
+            shootingCoroutine = null;
+        }
+
+        Vector3 loweredPosition = originalPosition + Vector3.down * 0.5f;
         float lowerSpeed = 5f;
 
         while (Vector3.Distance(transform.localPosition, loweredPosition) > 0.01f)
