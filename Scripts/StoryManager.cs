@@ -7,7 +7,6 @@ public class StoryManager : MonoBehaviour
     public AudioClip audio1;
     public AudioClip audio2;
     public AudioClip audio3;
-    public AudioClip audio4;
 
     public DoorScript doorA;
     public DoorScript doorB;
@@ -19,42 +18,54 @@ public class StoryManager : MonoBehaviour
     {
         // Create an AudioSource component to play audio clips
         audioSource = gameObject.AddComponent<AudioSource>();
-        StartCoroutine(PlayStorySequence());
+        StartCoroutine(PlayInitialAudioSequence());
     }
 
-    private IEnumerator PlayStorySequence()
+    private IEnumerator PlayInitialAudioSequence()
     {
         // Play audio 1 and wait for it to finish
         audioSource.clip = audio1;
         audioSource.Play();
-        yield return new WaitForSeconds(audio1.length);
+        yield return new WaitForSeconds(audio1.length - 5f); // Adjusted for early door opening
 
-        // Open doorA and wait for it to finish
+        // Open doorA 5 seconds before audio 1 ends
         doorA.Open();
-        yield return new WaitForSeconds(2f); // Wait for doorA to open
+        yield return new WaitForSeconds(5f);
+    }
 
-        // Play audio 2 and wait for it to finish
+    public void StartAudio2Sequence()
+    {
+        StartCoroutine(PlayAudio2Sequence());
+    }
+
+    private IEnumerator PlayAudio2Sequence()
+    {
+        // Play audio 2
         audioSource.clip = audio2;
         audioSource.Play();
-        yield return new WaitForSeconds(audio2.length);
+        yield return new WaitForSeconds(audio2.length - 5f); // Adjusted for early door opening
 
-        // Open doorB and wait for it to finish
+        // Open doorB 5 seconds before audio 2 ends
         doorB.Open();
-        yield return new WaitForSeconds(2f); // Wait for doorB to open
+        yield return new WaitForSeconds(5f);
+    }
 
-        // Play audio 3 and wait for it to finish
+    public void StartAudio3Sequence()
+    {
+        StartCoroutine(PlayAudio3Sequence());
+    }
+
+    private IEnumerator PlayAudio3Sequence()
+    {
+        // Play audio 3
         audioSource.clip = audio3;
         audioSource.Play();
         yield return new WaitForSeconds(audio3.length);
 
-        // Enable storyItem3
+        // Enable storyItem3 once audio 3 finishes
         if (storyItem3 != null)
         {
             storyItem3.SetActive(true);
         }
-
-        // Play audio 4
-        audioSource.clip = audio4;
-        audioSource.Play();
     }
 }

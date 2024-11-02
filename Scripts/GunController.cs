@@ -20,6 +20,8 @@ public class GunController : MonoBehaviour
         public ParticleSystem shotEffect; // Particle effect for shooting
         public AudioClip shootSound; // Audio clip for shooting
         public AudioClip reloadSound; // Audio clip for reloading
+
+        public int currentBulletsInMag; // Bullets currently in the magazine
     }
 
     public Weapon[] weapons; // Array of all weapons
@@ -27,7 +29,6 @@ public class GunController : MonoBehaviour
     private Weapon currentWeapon; // Current weapon reference
     private bool isReloading = false; // Is the gun reloading
     private bool canShoot = true; // Can the gun shoot
-    private int bulletsInMag; // Bullets left in the magazine
 
     public Vector3 positionA; // Default position for the gun manager
     public Vector3 positionB; // Aim down sights position for the gun manager
@@ -42,6 +43,7 @@ public class GunController : MonoBehaviour
     public float recoilUpwardRotation = 5f; // Amount of upward rotation recoil in degrees
 
     private Coroutine shootingCoroutine; // Coroutine for continuous shooting when holding down the button
+    private Coroutine reloadCoroutine; // Coroutine for reloading
     private Vector3 originalPosition; // Original local position of the gun
     private Quaternion originalRotation; // Original local rotation of the gun
     private AudioSource audioSource; // Audio source component
@@ -51,6 +53,13 @@ public class GunController : MonoBehaviour
         originalPosition = transform.localPosition;
         originalRotation = transform.localRotation;
         audioSource = gameObject.AddComponent<AudioSource>(); // Add AudioSource component
+
+        // Initialize currentBulletsInMag for each weapon
+        foreach (Weapon weapon in weapons)
+        {
+            weapon.currentBulletsInMag = weapon.bulletsPerMag;
+        }
+
         SelectWeapon(0); // Start with the first weapon if desired
         UpdateAmmoDisplay(); // Initialize ammo display
     }
@@ -104,9 +113,9 @@ public class GunController : MonoBehaviour
             }
         }
 
-        if (Input.GetKeyDown(KeyCode.R) && bulletsInMag < currentWeapon.bulletsPerMag)
+        if (Input.GetKeyDown(KeyCode.R) && currentWeapon.currentBulletsInMag < currentWeapon.bulletsPerMag && !isReloading)
         {
-            StartCoroutine(Reload());
+            reloadCoroutine = StartCoroutine(Reload());
         }
     }
 
@@ -135,6 +144,21 @@ public class GunController : MonoBehaviour
             shootingCoroutine = null;
         }
 
+        if (isReloading)
+        {
+            if (reloadCoroutine != null)
+            {
+                StopCoroutine(reloadCoroutine);
+                reloadCoroutine = null;
+            }
+            isReloading = false;
+            canShoot = true;
+            // Reset gun position and rotation
+            Vector3 targetPosition = Input.GetMouseButton(1) ? positionB : positionA;
+            transform.localPosition = targetPosition;
+            transform.localRotation = originalRotation;
+        }
+
         foreach (Weapon weapon in weapons)
         {
             weapon.weaponObject.SetActive(false);
@@ -144,7 +168,8 @@ public class GunController : MonoBehaviour
         {
             weapons[index].weaponObject.SetActive(true);
             currentWeapon = weapons[index];
-            bulletsInMag = currentWeapon.bulletsPerMag;
+            currentWeaponIndex = index;
+            canShoot = true;
             UpdateAmmoDisplay();
         }
         else
@@ -171,9 +196,9 @@ public class GunController : MonoBehaviour
 
     void Shoot()
     {
-        if (bulletsInMag <= 0)
+        if (currentWeapon.currentBulletsInMag <= 0)
         {
-            StartCoroutine(Reload());
+            reloadCoroutine = StartCoroutine(Reload());
             return;
         }
 
@@ -202,7 +227,7 @@ public class GunController : MonoBehaviour
         }
 
         Debug.Log("Shoot");
-        bulletsInMag--; // Decrease bullets count
+        currentWeapon.currentBulletsInMag--; // Decrease bullets count
         UpdateAmmoDisplay();
         Invoke(nameof(ResetShoot), currentWeapon.timeBetweenShots);
 
@@ -283,9 +308,19 @@ public class GunController : MonoBehaviour
             audioSource.PlayOneShot(currentWeapon.reloadSound);
         }
 
-        yield return new WaitForSeconds(currentWeapon.reloadTime);
+        float reloadTimeRemaining = currentWeapon.reloadTime;
+        while (reloadTimeRemaining > 0f)
+        {
+            // If we switched weapons during reload, exit coroutine
+            if (!isReloading)
+            {
+                yield break;
+            }
+            reloadTimeRemaining -= Time.deltaTime;
+            yield return null;
+        }
 
-        bulletsInMag = currentWeapon.bulletsPerMag;
+        currentWeapon.currentBulletsInMag = currentWeapon.bulletsPerMag;
         UpdateAmmoDisplay();
 
         while (Vector3.Distance(transform.localPosition, originalPosition) > 0.01f)
@@ -296,13 +331,14 @@ public class GunController : MonoBehaviour
 
         isReloading = false;
         canShoot = true;
+        reloadCoroutine = null;
     }
 
     void UpdateAmmoDisplay()
     {
         if (currentWeapon != null)
         {
-            ammoDisplay.text = $"{bulletsInMag}/{currentWeapon.bulletsPerMag}";
+            ammoDisplay.text = $"{currentWeapon.currentBulletsInMag}/{currentWeapon.bulletsPerMag}";
         }
         else
         {

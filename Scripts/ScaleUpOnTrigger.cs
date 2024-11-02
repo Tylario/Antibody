@@ -1,36 +1,49 @@
 using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
 
 public class ScaleUpOnTrigger : MonoBehaviour
 {
-    // Public GameObject that will be scaled
-    public GameObject targetObject;
+    // GameObjects to scale
+    public GameObject gameObject1;
+    public GameObject gameObject2;
+
+    // Target scales for each GameObject
+    public Vector3 gameObject1TargetScale = new Vector3(2f, 2f, 2f);
+    public Vector3 gameObject2TargetScale = new Vector3(3f, 3f, 3f);
+
+    // Time in seconds to reach the target scale
+    public float timeToScale = 2f;
 
     // List of GameObjects with colliders to enable when triggered
     public List<GameObject> newColliders;
 
-    // Scale multiplier per second
-    public float scaleMultiplier = 1.5f;
-
-    // Maximum scale multiplier
-    private float maxScale = 50f;
-
-    // Store original scale
-    private Vector3 originalScale;
+    // Store original scales
+    private Vector3 originalScale1;
+    private Vector3 originalScale2;
 
     // Keep track of scaling state
     private bool isScaling = false;
 
     void Start()
     {
-        // Save the original scale of the target object
-        if (targetObject != null)
+        // Save the original scales of the target objects
+        if (gameObject1 != null)
         {
-            originalScale = targetObject.transform.localScale;
+            originalScale1 = gameObject1.transform.localScale;
         }
         else
         {
-            Debug.LogWarning("Target Object is not assigned.");
+            Debug.LogWarning("GameObject 1 is not assigned.");
+        }
+
+        if (gameObject2 != null)
+        {
+            originalScale2 = gameObject2.transform.localScale;
+        }
+        else
+        {
+            Debug.LogWarning("GameObject 2 is not assigned.");
         }
 
         // Initially disable all new colliders
@@ -44,11 +57,11 @@ public class ScaleUpOnTrigger : MonoBehaviour
     void OnTriggerEnter(Collider other)
     {
         // Check if the object entering the trigger has the "Player" tag
-        if (other.CompareTag("Player") && targetObject != null && !isScaling)
+        if (other.CompareTag("Player") && !isScaling)
         {
             isScaling = true;
             EnableNewColliders();
-            StartCoroutine(ScaleUp());
+            StartCoroutine(ScaleObjectsOverTime());
         }
     }
 
@@ -62,22 +75,45 @@ public class ScaleUpOnTrigger : MonoBehaviour
         }
     }
 
-    private System.Collections.IEnumerator ScaleUp()
+    private IEnumerator ScaleObjectsOverTime()
     {
-        while (isScaling && targetObject.transform.localScale.x < originalScale.x * maxScale)
-        {
-            // Increase scale
-            targetObject.transform.localScale *= (1 + (scaleMultiplier * Time.deltaTime));
+        float elapsedTime = 0f;
 
-            // Check if scale has reached the limit
-            if (targetObject.transform.localScale.x >= originalScale.x * maxScale)
+        while (elapsedTime < timeToScale)
+        {
+            // Scale gameObject1 towards its target scale
+            if (gameObject1 != null)
             {
-                targetObject.transform.localScale = originalScale * maxScale;
-                isScaling = false;
+                gameObject1.transform.localScale = Vector3.Lerp(
+                    originalScale1, 
+                    gameObject1TargetScale, 
+                    elapsedTime / timeToScale
+                );
             }
 
+            // Scale gameObject2 towards its target scale
+            if (gameObject2 != null)
+            {
+                gameObject2.transform.localScale = Vector3.Lerp(
+                    originalScale2, 
+                    gameObject2TargetScale, 
+                    elapsedTime / timeToScale
+                );
+            }
+
+            // Increase the elapsed time
+            elapsedTime += Time.deltaTime;
             yield return null;
         }
+
+        // Ensure final scale is exactly at the target scale
+        if (gameObject1 != null)
+            gameObject1.transform.localScale = gameObject1TargetScale;
+
+        if (gameObject2 != null)
+            gameObject2.transform.localScale = gameObject2TargetScale;
+
+        isScaling = false;
     }
 
     void OnTriggerExit(Collider other)
@@ -86,6 +122,7 @@ public class ScaleUpOnTrigger : MonoBehaviour
         if (other.CompareTag("Player"))
         {
             isScaling = false;
+            StopAllCoroutines();
         }
     }
 }

@@ -21,9 +21,6 @@ public class BackpackRaycast : MonoBehaviour
             RaycastHit hit;
             if (Physics.Raycast(rayOrigin, rayDirection, out hit, remainingDistance))
             {
-                Debug.Log("Hit Object Name: " + hit.collider.name);
-                Debug.Log("Hit Object Tag: " + hit.collider.tag);
-
                 if (hit.collider.CompareTag("Backpack"))
                 {
                     isLookingAtBackpack = true;
