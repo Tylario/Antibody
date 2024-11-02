@@ -31,7 +31,6 @@ public class BackpackRaycast : MonoBehaviour
                     {
                         gunController.gunsUnlocked = true;
                         instructionText.text = ""; // Clear the text
-                        Debug.Log("Gun unlocked!"); // Confirm that gunsUnlocked has been set
                     }
                     break; // Exit loop when backpack is found
                 }

@@ -14,6 +14,11 @@ public class StoryManager : MonoBehaviour
 
     private AudioSource audioSource;
 
+    // Flags to check if each audio sequence has already started
+    private bool audio1Played = false;
+    private bool audio2Played = false;
+    private bool audio3Played = false;
+
     private void Start()
     {
         // Create an AudioSource component to play audio clips
@@ -24,18 +29,26 @@ public class StoryManager : MonoBehaviour
     private IEnumerator PlayInitialAudioSequence()
     {
         // Play audio 1 and wait for it to finish
-        audioSource.clip = audio1;
-        audioSource.Play();
-        yield return new WaitForSeconds(audio1.length - 5f); // Adjusted for early door opening
+        if (!audio1Played)
+        {
+            audio1Played = true; // Set flag to true to prevent re-triggering
+            audioSource.clip = audio1;
+            audioSource.Play();
+            yield return new WaitForSeconds(audio1.length - 5f); // Adjusted for early door opening
 
-        // Open doorA 5 seconds before audio 1 ends
-        doorA.Open();
-        yield return new WaitForSeconds(5f);
+            // Open doorA 5 seconds before audio 1 ends
+            doorA.Open();
+            yield return new WaitForSeconds(5f);
+        }
     }
 
     public void StartAudio2Sequence()
     {
-        StartCoroutine(PlayAudio2Sequence());
+        if (!audio2Played) // Check flag before starting sequence
+        {
+            audio2Played = true; // Set flag to true to prevent re-triggering
+            StartCoroutine(PlayAudio2Sequence());
+        }
     }
 
     private IEnumerator PlayAudio2Sequence()
@@ -52,7 +65,11 @@ public class StoryManager : MonoBehaviour
 
     public void StartAudio3Sequence()
     {
-        StartCoroutine(PlayAudio3Sequence());
+        if (!audio3Played) // Check flag before starting sequence
+        {
+            audio3Played = true; // Set flag to true to prevent re-triggering
+            StartCoroutine(PlayAudio3Sequence());
+        }
     }
 
     private IEnumerator PlayAudio3Sequence()

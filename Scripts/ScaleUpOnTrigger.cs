@@ -18,9 +18,20 @@ public class ScaleUpOnTrigger : MonoBehaviour
     // List of GameObjects with colliders to enable when triggered
     public List<GameObject> newColliders;
 
-    // Store original scales
+    // A new GameObject with collider to enable after scaling is complete
+    public GameObject newColliderGameObject;
+    public GameObject germspawner;
+
+    // The point light to adjust
+    public Light pointLight;
+
+    // Target intensity for the point light
+    public float pointLightTargetIntensity = 3500f;
+
+    // Store original scales and intensity
     private Vector3 originalScale1;
     private Vector3 originalScale2;
+    private float originalIntensity = 0f;
 
     // Keep track of scaling state
     private bool isScaling = false;
@@ -46,11 +57,33 @@ public class ScaleUpOnTrigger : MonoBehaviour
             Debug.LogWarning("GameObject 2 is not assigned.");
         }
 
+        // Set initial intensity of pointLight to 0
+        if (pointLight != null)
+        {
+            originalIntensity = 0f;
+            pointLight.intensity = originalIntensity;
+        }
+        else
+        {
+            Debug.LogWarning("Point Light is not assigned.");
+        }
+
         // Initially disable all new colliders
         foreach (GameObject colliderObject in newColliders)
         {
             if (colliderObject != null)
                 colliderObject.SetActive(false);
+        }
+
+        // Initially disable the newColliderGameObject
+        if (newColliderGameObject != null)
+        {
+            newColliderGameObject.SetActive(false);
+        }
+
+        if (germspawner != null)
+        {
+            germspawner.SetActive(false);
         }
     }
 
@@ -81,13 +114,15 @@ public class ScaleUpOnTrigger : MonoBehaviour
 
         while (elapsedTime < timeToScale)
         {
+            float t = elapsedTime / timeToScale;
+
             // Scale gameObject1 towards its target scale
             if (gameObject1 != null)
             {
                 gameObject1.transform.localScale = Vector3.Lerp(
-                    originalScale1, 
-                    gameObject1TargetScale, 
-                    elapsedTime / timeToScale
+                    originalScale1,
+                    gameObject1TargetScale,
+                    t
                 );
             }
 
@@ -95,9 +130,20 @@ public class ScaleUpOnTrigger : MonoBehaviour
             if (gameObject2 != null)
             {
                 gameObject2.transform.localScale = Vector3.Lerp(
-                    originalScale2, 
-                    gameObject2TargetScale, 
-                    elapsedTime / timeToScale
+                    originalScale2,
+                    gameObject2TargetScale,
+                    t
+                );
+            }
+
+            // Adjust point light intensity using a cubic function
+            if (pointLight != null)
+            {
+                float volumeScaleFactor = Mathf.Pow(t, 3f); // Cubic to simulate volume
+                pointLight.intensity = Mathf.Lerp(
+                    originalIntensity,
+                    pointLightTargetIntensity,
+                    volumeScaleFactor
                 );
             }
 
@@ -112,6 +158,17 @@ public class ScaleUpOnTrigger : MonoBehaviour
 
         if (gameObject2 != null)
             gameObject2.transform.localScale = gameObject2TargetScale;
+
+        // Ensure final intensity is exactly at the target intensity
+        if (pointLight != null)
+            pointLight.intensity = pointLightTargetIntensity;
+
+        // Enable the newColliderGameObject after scaling is complete
+        if (newColliderGameObject != null)
+            newColliderGameObject.SetActive(true);
+            
+        if (germspawner != null)
+            germspawner.SetActive(true);
 
         isScaling = false;
     }

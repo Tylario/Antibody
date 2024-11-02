@@ -226,7 +226,6 @@ public class GunController : MonoBehaviour
             audioSource.PlayOneShot(currentWeapon.shootSound);
         }
 
-        Debug.Log("Shoot");
         currentWeapon.currentBulletsInMag--; // Decrease bullets count
         UpdateAmmoDisplay();
         Invoke(nameof(ResetShoot), currentWeapon.timeBetweenShots);
