@@ -16,6 +16,10 @@ public class GunController : MonoBehaviour
         public bool isAutomatic; // If true, gun will fire automatically when holding down the button
         public Transform bulletSpawnPoint; // Where bullets spawn
         public GameObject bulletPrefab; // Bullet prefab
+
+        public ParticleSystem shotEffect; // Particle effect for shooting
+        public AudioClip shootSound; // Audio clip for shooting
+        public AudioClip reloadSound; // Audio clip for reloading
     }
 
     public Weapon[] weapons; // Array of all weapons
@@ -39,11 +43,13 @@ public class GunController : MonoBehaviour
     private Coroutine shootingCoroutine; // Coroutine for continuous shooting when holding down the button
     private Vector3 originalPosition; // Original local position of the gun
     private Quaternion originalRotation; // Original local rotation of the gun
+    private AudioSource audioSource; // Audio source component
 
     private void Start()
     {
         originalPosition = transform.localPosition;
         originalRotation = transform.localRotation;
+        audioSource = gameObject.AddComponent<AudioSource>(); // Add AudioSource component
         SelectWeapon(0); // Start with the first weapon if desired
         UpdateAmmoDisplay(); // Initialize ammo display
     }
@@ -92,7 +98,6 @@ public class GunController : MonoBehaviour
             StartCoroutine(Reload());
         }
     }
-
 
     void HandleWeaponSwitching()
     {
@@ -175,6 +180,16 @@ public class GunController : MonoBehaviour
             Instantiate(currentWeapon.bulletPrefab, currentWeapon.bulletSpawnPoint.position, Quaternion.LookRotation(shootDirection));
         }
 
+        // Play particle effect and sound
+        if (currentWeapon.shotEffect != null)
+        {
+            currentWeapon.shotEffect.Play();
+        }
+        if (currentWeapon.shootSound != null)
+        {
+            audioSource.PlayOneShot(currentWeapon.shootSound);
+        }
+
         Debug.Log("Shoot");
         bulletsInMag--; // Decrease bullets count
         UpdateAmmoDisplay();
@@ -243,13 +258,18 @@ public class GunController : MonoBehaviour
             shootingCoroutine = null;
         }
 
-        Vector3 loweredPosition = originalPosition + Vector3.down * 0.5f;
+        Vector3 loweredPosition = originalPosition + Vector3.down;
         float lowerSpeed = 5f;
 
         while (Vector3.Distance(transform.localPosition, loweredPosition) > 0.01f)
         {
             transform.localPosition = Vector3.Lerp(transform.localPosition, loweredPosition, Time.deltaTime * lowerSpeed);
             yield return null;
+        }
+
+        if (currentWeapon.reloadSound != null)
+        {
+            audioSource.PlayOneShot(currentWeapon.reloadSound);
         }
 
         yield return new WaitForSeconds(currentWeapon.reloadTime);
