@@ -1,10 +1,10 @@
-using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
+using UnityEngine;
 
 public class Germ : MonoBehaviour
 {
-    // Health parameters
-    public int maxHealth = 3;
+    public int maxHealth = 1;  // Start with 1 health point
     private int currentHealth;
 
     // Movement parameters
@@ -35,6 +35,9 @@ public class Germ : MonoBehaviour
     public LayerMask obstacleLayer;
     private float raycastDistance = 2f;
 
+    private ParticleSystem deathEffect;
+    private bool isDead = false; // Flag to track if the germ is dead
+
     void Start()
     {
         // Initialize health
@@ -47,8 +50,8 @@ public class Germ : MonoBehaviour
         AssignRandomColor();
 
         // Randomly assign movement parameters
-        moveSpeed = Random.Range(1f, 3f);
-        turnSpeed = Random.Range(2f, 5f);
+        moveSpeed = Random.Range(5f, 9f);
+        turnSpeed = Random.Range(5f, 8f);
         neighborRadius = Random.Range(3f, 5f);
         avoidanceRadius = neighborRadius * 0.5f;
 
@@ -59,6 +62,17 @@ public class Germ : MonoBehaviour
         GameObject player = GameObject.FindGameObjectWithTag("Player");
         if (player != null)
             playerTransform = player.transform;
+
+        // Get the attached ParticleSystem component for the death effect
+        deathEffect = GetComponent<ParticleSystem>();
+
+        // Ensure the particle system scales with the germ
+        if (deathEffect != null)
+        {
+            var mainModule = deathEffect.main;
+            mainModule.scalingMode = ParticleSystemScalingMode.Hierarchy;
+            mainModule.duration = 1.5f;  // Set the particle effect duration to 1.5 seconds
+        }
     }
 
     private void AssignRandomColor()
@@ -84,6 +98,8 @@ public class Germ : MonoBehaviour
 
     void Update()
     {
+        if (isDead) return; // Skip movement and behaviors if the germ is dead
+
         Vector3 acceleration = Vector3.zero;
 
         // Boid behaviors
@@ -218,27 +234,49 @@ public class Germ : MonoBehaviour
 
     public void TakeDamage(int damageAmount)
     {
-        currentHealth -= damageAmount;
+        if (isDead) return; // Prevent further actions if germ is already dead
 
+        currentHealth -= 1;
+
+        // Play the particle effect once per hit, then stop it shortly after
+        if (deathEffect != null)
+        {
+            deathEffect.Stop();  // Stop any ongoing playback to reset the particle effect
+            deathEffect.Play();  // Play the effect once per hit
+            Invoke(nameof(StopParticleEffect), 0.1f); // Stop the particle effect after 0.1 seconds
+        }
+
+        // Check if the germ's health has reached zero
         if (currentHealth <= 0)
         {
-            // Optionally, play a death effect here (e.g., particle system, sound)
-            DestroyGerm();
+            isDead = true; // Mark as dead to prevent further updates
+            StartCoroutine(DestroyAfterDelay(0.5f)); // Start the delayed destruction process
         }
     }
 
-    private void DestroyGerm()
+    // Method to stop the particle effect after a delay
+    private void StopParticleEffect()
     {
-        // Remove this germ from the list
-        allGerms.Remove(this);
-
-        // Destroy the germ GameObject
-        Destroy(gameObject);
+        if (deathEffect != null)
+        {
+            deathEffect.Stop();
+        }
     }
 
-    void OnDestroy()
+
+    private IEnumerator DestroyAfterDelay(float delay)
     {
-        // Ensure the germ is removed from the list if destroyed by other means
+        // Hide visual components by destroying child objects
+        foreach (Transform child in transform)
+        {
+            Destroy(child.gameObject);
+        }
+
+        // Wait for the delay, allowing the particle effect to play
+        yield return new WaitForSeconds(delay);
+
+        // Remove the germ from the list and destroy the GameObject
         allGerms.Remove(this);
+        Destroy(gameObject);
     }
 }

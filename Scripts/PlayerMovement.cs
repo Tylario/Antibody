@@ -43,4 +43,12 @@ public class PlayerMovement : MonoBehaviour
         velocity.y += gravity * Time.deltaTime;
         controller.Move(velocity * Time.deltaTime);
     }
+
+    // Function to activate combat mode settings
+    public void combatStart()
+    {
+        speed = 10f;
+        jumpHeight = 3f;
+        gravity = -20f;
+    }
 }

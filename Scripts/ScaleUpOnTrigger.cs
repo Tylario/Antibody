@@ -36,6 +36,9 @@ public class ScaleUpOnTrigger : MonoBehaviour
     // Keep track of scaling state
     private bool isScaling = false;
 
+    // Reference to PlayerMovement script
+    public PlayerMovement PlayerMovement;
+
     void Start()
     {
         // Save the original scales of the target objects
@@ -169,6 +172,12 @@ public class ScaleUpOnTrigger : MonoBehaviour
             
         if (germspawner != null)
             germspawner.SetActive(true);
+
+        // Trigger combat start in player movement
+        if (PlayerMovement != null)
+        {
+            PlayerMovement.combatStart();
+        }
 
         isScaling = false;
     }
