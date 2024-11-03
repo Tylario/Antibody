@@ -1,93 +1,97 @@
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 public class Germ : MonoBehaviour
 {
-    public int maxHealth = 1;  // Start with 1 health point
+    public int maxHealth = 1;
     private int currentHealth;
 
     // Movement parameters
     private float moveSpeed;
     private float turnSpeed;
-    private float neighborRadius;
-    private float avoidanceRadius;
+    public float minSpeed = 2f; // Minimum speed
+    public float maxSpeed = 4f; // Maximum speed
 
-    // Boid behavior weights
-    private float alignmentWeight = 1f;
-    private float cohesionWeight = 1f;
-    private float separationWeight = 1.5f;
+    // Movement bounds
+    private float cylinderRadius;
+    private float lowerBoundY;
+    private float upperBoundY;
 
-    // Reference to all germs for boid behaviors
-    private static List<Germ> allGerms = new List<Germ>();
-
-    // Random chance to follow the player
-    public float followPlayerChance = 0.3f;
-    private bool isFollowingPlayer = false;
-
-    // Reference to the player
-    private Transform playerTransform;
+    // Path control points for curved movement
+    private Vector3 startPoint;
+    private Vector3 controlPoint1;
+    private Vector3 controlPoint2;
+    private Vector3 endPoint;
+    private float t; // Interpolation factor
+    private float curveLength; // Length of the Bezier curve
 
     // Renderer for the germ's visual appearance
     public Renderer germRenderer;
 
-    // Raycasting for obstacle avoidance
-    public LayerMask obstacleLayer;
-    private float raycastDistance = 2f;
-
     private ParticleSystem deathEffect;
-    private bool isDead = false; // Flag to track if the germ is dead
+    private bool isDead = false;
 
     void Start()
     {
+        // Find the GermAreaManager from the scene
+        GameObject managerObject = GameObject.FindGameObjectWithTag("pointManager");
+        if (managerObject != null)
+        {
+            GermAreaManager manager = managerObject.GetComponent<GermAreaManager>();
+            GermAreaManager.LowerPoint = manager.lowerPoint;
+            GermAreaManager.UpperPoint = manager.upperPoint;
+            GermAreaManager.CenterPoint = manager.centerPoint;
+            GermAreaManager.OuterPoint = manager.outerPoint;
+        }
+        else
+        {
+            Debug.LogError("GermAreaManager with tag 'pointManager' not found in the scene!");
+            return;
+        }
+
         // Initialize health
         currentHealth = maxHealth;
-
-        // Add this germ to the list
-        allGerms.Add(this);
 
         // Assign a random color to the germ's material
         AssignRandomColor();
 
-        // Randomly assign movement parameters
-        moveSpeed = Random.Range(5f, 9f);
+        // Set a random move speed within the min and max range
+        moveSpeed = Random.Range(minSpeed, maxSpeed);
         turnSpeed = Random.Range(5f, 8f);
-        neighborRadius = Random.Range(3f, 5f);
-        avoidanceRadius = neighborRadius * 0.5f;
-
-        // Decide whether this germ will follow the player
-        isFollowingPlayer = Random.value < followPlayerChance;
-
-        // Find the player by tag
-        GameObject player = GameObject.FindGameObjectWithTag("Player");
-        if (player != null)
-            playerTransform = player.transform;
 
         // Get the attached ParticleSystem component for the death effect
         deathEffect = GetComponent<ParticleSystem>();
 
-        // Ensure the particle system scales with the germ
         if (deathEffect != null)
         {
             var mainModule = deathEffect.main;
             mainModule.scalingMode = ParticleSystemScalingMode.Hierarchy;
-            mainModule.duration = 1.5f;  // Set the particle effect duration to 1.5 seconds
+            mainModule.duration = 1.5f;
         }
+
+        // Calculate the cylinder bounds and set an initial curved path
+        CalculateCylinderBounds();
+        SetNewCurvedPath();
+    }
+
+    private void CalculateCylinderBounds()
+    {
+        cylinderRadius = Vector3.Distance(GermAreaManager.CenterPoint.position, GermAreaManager.OuterPoint.position);
+        lowerBoundY = GermAreaManager.LowerPoint.position.y;
+        upperBoundY = GermAreaManager.UpperPoint.position.y;
     }
 
     private void AssignRandomColor()
     {
         if (germRenderer != null)
         {
-            // Create a new material instance with a random color
-            Material randomColorMaterial = new Material(germRenderer.sharedMaterial); // Using sharedMaterial to avoid creating multiple instances unnecessarily
+            Material randomColorMaterial = new Material(germRenderer.sharedMaterial);
             randomColorMaterial.color = new Color(
                 Random.Range(0.4f, 1f),
                 Random.Range(0.4f, 1f),
                 Random.Range(0.4f, 1f)
             );
 
-            // Assign the newly created material to the renderer
             germRenderer.material = randomColorMaterial;
         }
         else
@@ -98,163 +102,121 @@ public class Germ : MonoBehaviour
 
     void Update()
     {
-        if (isDead) return; // Skip movement and behaviors if the germ is dead
+        if (isDead) return;
 
-        Vector3 acceleration = Vector3.zero;
+        // Calculate the movement increment based on speed and curve length
+        float moveIncrement = moveSpeed / curveLength;
 
-        // Boid behaviors
-        acceleration += Alignment() * alignmentWeight;
-        acceleration += Cohesion() * cohesionWeight;
-        acceleration += Separation() * separationWeight;
+        // Move along the curved path
+        t += moveIncrement * Time.deltaTime;
 
-        // Follow or orbit the player if this germ is assigned to
-        if (isFollowingPlayer && playerTransform != null)
+        // Interpolate the position on the Bezier curve
+        Vector3 nextPosition = CalculateBezierPoint(t, startPoint, controlPoint1, controlPoint2, endPoint);
+        Vector3 direction = (nextPosition - transform.position).normalized;
+        transform.position = nextPosition;
+
+        // Rotate smoothly towards the path direction
+        if (direction != Vector3.zero)
         {
-            acceleration += FollowPlayer();
+            Quaternion targetRotation = Quaternion.LookRotation(direction);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, turnSpeed * Time.deltaTime);
         }
 
-        // Obstacle avoidance
-        acceleration += ObstacleAvoidance();
-
-        // Move in the forward direction
-        transform.position += transform.forward * moveSpeed * Time.deltaTime;
-
-        // Rotate towards the calculated acceleration
-        if (acceleration != Vector3.zero)
+        // If the curve is completed, set a new path
+        if (t >= 1f)
         {
-            Quaternion rotation = Quaternion.LookRotation(acceleration.normalized);
-            transform.rotation = Quaternion.Slerp(transform.rotation, rotation, turnSpeed * Time.deltaTime);
+            SetNewCurvedPath();
         }
     }
 
-    private Vector3 Alignment()
+    private void SetNewCurvedPath()
     {
-        Vector3 alignmentMove = Vector3.zero;
-        int count = 0;
+        // Reset interpolation factor
+        t = 0f;
 
-        foreach (Germ germ in allGerms)
-        {
-            if (germ != this)
-            {
-                float distance = Vector3.Distance(transform.position, germ.transform.position);
-                if (distance < neighborRadius)
-                {
-                    alignmentMove += germ.transform.forward;
-                    count++;
-                }
-            }
-        }
+        // Set start point as the germ's current position
+        startPoint = transform.position;
 
-        if (count > 0)
-        {
-            alignmentMove /= count;
-            alignmentMove = alignmentMove.normalized;
-        }
+        // Generate new random points within bounds for a smooth curve path
+        controlPoint1 = GenerateRandomPointWithinCylinder();
+        controlPoint2 = GenerateRandomPointWithinCylinder();
+        endPoint = GenerateRandomPointWithinCylinder();
 
-        return alignmentMove;
+        // Calculate the length of the new curve for consistent movement speed
+        curveLength = CalculateCurveLength(startPoint, controlPoint1, controlPoint2, endPoint);
     }
 
-    private Vector3 Cohesion()
+    private Vector3 GenerateRandomPointWithinCylinder()
     {
-        Vector3 cohesionMove = Vector3.zero;
-        int count = 0;
+        // Generate a random angle and radius within the cylindrical bounds
+        float randomAngle = Random.Range(0, 360) * Mathf.Deg2Rad;
+        float randomRadius = Random.Range(0, cylinderRadius);
+        float randomY = Random.Range(lowerBoundY, upperBoundY);
 
-        foreach (Germ germ in allGerms)
-        {
-            if (germ != this)
-            {
-                float distance = Vector3.Distance(transform.position, germ.transform.position);
-                if (distance < neighborRadius)
-                {
-                    cohesionMove += germ.transform.position;
-                    count++;
-                }
-            }
-        }
+        // Calculate the new position within the cylinder
+        Vector3 offset = new Vector3(
+            Mathf.Cos(randomAngle) * randomRadius,
+            randomY - GermAreaManager.CenterPoint.position.y,
+            Mathf.Sin(randomAngle) * randomRadius
+        );
 
-        if (count > 0)
-        {
-            cohesionMove /= count;
-            cohesionMove = (cohesionMove - transform.position).normalized;
-        }
-
-        return cohesionMove;
+        return GermAreaManager.CenterPoint.position + offset;
     }
 
-    private Vector3 Separation()
+    private Vector3 CalculateBezierPoint(float t, Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3)
     {
-        Vector3 separationMove = Vector3.zero;
-        int count = 0;
+        // Cubic Bezier curve calculation
+        float u = 1 - t;
+        float tt = t * t;
+        float uu = u * u;
+        float uuu = uu * u;
+        float ttt = tt * t;
 
-        foreach (Germ germ in allGerms)
-        {
-            if (germ != this)
-            {
-                float distance = Vector3.Distance(transform.position, germ.transform.position);
-                if (distance < avoidanceRadius)
-                {
-                    separationMove += (transform.position - germ.transform.position) / distance;
-                    count++;
-                }
-            }
-        }
+        Vector3 point = uuu * p0; // (1 - t)^3 * p0
+        point += 3 * uu * t * p1; // 3 * (1 - t)^2 * t * p1
+        point += 3 * u * tt * p2; // 3 * (1 - t) * t^2 * p2
+        point += ttt * p3; // t^3 * p3
 
-        if (count > 0)
-        {
-            separationMove /= count;
-            separationMove = separationMove.normalized;
-        }
-
-        return separationMove;
+        return point;
     }
 
-    private Vector3 FollowPlayer()
+    private float CalculateCurveLength(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, int numSamples = 10)
     {
-        Vector3 directionToPlayer = (playerTransform.position - transform.position).normalized;
+        // Approximate curve length by sampling points
+        float length = 0f;
+        Vector3 previousPoint = p0;
 
-        // Optionally, make the germs orbit around the player
-        Vector3 orbitDirection = Vector3.Cross(Vector3.up, directionToPlayer).normalized;
-
-        // Mix between following directly and orbiting
-        return (directionToPlayer + orbitDirection * 0.5f).normalized;
-    }
-
-    private Vector3 ObstacleAvoidance()
-    {
-        RaycastHit hit;
-        if (Physics.Raycast(transform.position, transform.forward, out hit, raycastDistance, obstacleLayer))
+        for (int i = 1; i <= numSamples; i++)
         {
-            // Calculate a direction to avoid the obstacle
-            Vector3 avoidanceDir = Vector3.Reflect(transform.forward, hit.normal);
-            return avoidanceDir.normalized * 2f; // Multiply to give higher priority
+            float t = (float)i / numSamples;
+            Vector3 point = CalculateBezierPoint(t, p0, p1, p2, p3);
+            length += Vector3.Distance(previousPoint, point);
+            previousPoint = point;
         }
 
-        return Vector3.zero;
+        return length;
     }
 
     public void TakeDamage(int damageAmount)
     {
-        if (isDead) return; // Prevent further actions if germ is already dead
+        if (isDead) return;
 
-        currentHealth -= 1;
+        currentHealth -= damageAmount;
 
-        // Play the particle effect once per hit, then stop it shortly after
         if (deathEffect != null)
         {
-            deathEffect.Stop();  // Stop any ongoing playback to reset the particle effect
-            deathEffect.Play();  // Play the effect once per hit
-            Invoke(nameof(StopParticleEffect), 0.1f); // Stop the particle effect after 0.1 seconds
+            deathEffect.Stop();
+            deathEffect.Play();
+            Invoke(nameof(StopParticleEffect), 0.1f);
         }
 
-        // Check if the germ's health has reached zero
         if (currentHealth <= 0)
         {
-            isDead = true; // Mark as dead to prevent further updates
-            StartCoroutine(DestroyAfterDelay(0.5f)); // Start the delayed destruction process
+            isDead = true;
+            StartCoroutine(DestroyAfterDelay(0.5f));
         }
     }
 
-    // Method to stop the particle effect after a delay
     private void StopParticleEffect()
     {
         if (deathEffect != null)
@@ -263,20 +225,15 @@ public class Germ : MonoBehaviour
         }
     }
 
-
     private IEnumerator DestroyAfterDelay(float delay)
     {
-        // Hide visual components by destroying child objects
         foreach (Transform child in transform)
         {
             Destroy(child.gameObject);
         }
 
-        // Wait for the delay, allowing the particle effect to play
         yield return new WaitForSeconds(delay);
 
-        // Remove the germ from the list and destroy the GameObject
-        allGerms.Remove(this);
         Destroy(gameObject);
     }
 }
